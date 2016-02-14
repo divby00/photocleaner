@@ -3,6 +3,7 @@
 from __future__ import division
 import argparse
 import os
+import shutil
 import stat
 import sys
 import time
@@ -12,8 +13,10 @@ import psutil
 
 
 class PhotoParser(object):
-    def __init__(self, photo_info):
+    def __init__(self, photo_info, paths):
+        self.data_tree = {}
         self.photo_info = photo_info
+        self.paths = paths
         self.photos_by_histogram = self.__sort_by_histogram()
         self.photos_to_process = self.__get_photos_to_process()
 
@@ -49,31 +52,58 @@ class PhotoParser(object):
     def process(self):
         try:
             # Order photos by creation date
-            tmp_photos = {}
-            for i in self.photos_to_process:
-                print(i)
-            '''
-                tmp_photos[i] = self.photo_info[i].get_file_date()
-            photos_by_creation = sorted(tmp_photos.items())
+            print('%d photos to process...' % len(self.photos_to_process))
+            self.photos_to_process.sort(key=lambda x: x.get_year())
 
-            # Making of the directory tree
+            years = list(set([p.get_year() for p in self.photos_to_process]))
 
-            result = {}
-            # Calculate unique years
-            unique_years = list(set([p[1][:4] for p in photos_by_creation]))
+            for y in years:
+                self.data_tree[y] = {}
 
-            # Associate months to years
-            for uy in unique_years:
-                months = []
-                for p in photos_by_creation:
-                    year = p[1][:4]
-                    if year == uy:
-                        months.append(p[1][5:7])
-                result[uy] = list(set(months))
-            '''
+            for y in years:
+                for p in self.photos_to_process:
+                    months = list(set([p.get_month() for p in self.photos_to_process if y == p.get_year()]))
+                    for m in months:
+                        self.data_tree[y][m] = []
+
+                for p in self.photos_to_process:
+                    self.data_tree[p.get_year()][p.get_month()].append(p)
+
+            # Data tree is completed.
+            self.__create_directory_tree()
+            self.__copy_files()
 
         except Exception, e:
             print('Error processing data:')
+            print(repr(e))
+            sys.exit(-1)
+
+    def __create_directory_tree(self):
+        try:
+            for year, v in self.data_tree.items():
+                for month, data in v.items():
+                    create_directory(''.join([self.paths[1], '/', year, '/', month]))
+
+        except Exception, e:
+            print(e)
+
+    def __copy_files(self):
+        try:
+            total = len(self.photos_to_process)
+            index = 0
+            for year, v in self.data_tree.items():
+                for month, data in v.items():
+                    for d in data:
+                        path = d.get_file_name()
+                        filename = path[path.rfind('/'):]
+                        output = ''.join([self.paths[1], '/', year, '/', month, filename])
+                        shutil.copy2(path, output)
+                        index += 1
+                        print('[%d%%] - Copying %s to %s' % (((index * 100) / total), filename, output))
+            print('Done!')
+
+        except Exception, e:
+            print('Error copying files')
             print(repr(e))
             sys.exit(-1)
 
@@ -182,7 +212,7 @@ def main():
     prepare_paths(paths)
     pc = PhotoCleaner(paths)
     photo_info = pc.get_photo_info()
-    ps = PhotoParser(photo_info)
+    ps = PhotoParser(photo_info, paths)
     ps.process()
 
 
@@ -195,7 +225,7 @@ def prepare_paths(paths):
     # Output path
     if not os.path.isdir(paths[1]):
         # Trying to create the output_path
-        create_output_path(paths[1])
+        create_directory(paths[1])
     else:
         return
         # Directory exists, delete contents?
@@ -220,18 +250,17 @@ def get_paths():
     return args.input_path, args.output_path
 
 
-def create_output_path(output_path):
+def create_directory(path):
     try:
-        os.mkdir(output_path)
+        os.makedirs(path)
     except Exception, e:
-        print('Unable to make directory ' + output_path)
-        sys.exit(-1)
+        print('Unable to make directory ' + path)
 
 
 def delete_output_path(output_path):
     try:
         os.rmdir(output_path)
-        create_output_path(output_path)
+        create_directory(output_path)
     except Exception, e:
         print('Unable to delete directory ' + output_path)
         sys.exit(-1)
