@@ -95,8 +95,9 @@ class PhotoParser(object):
                 for month, data in v.items():
                     for d in data:
                         path = d.get_file_name()
-                        filename = path[path.rfind('/'):]
-                        output = ''.join([self.paths[1], '/', year, '/', month, filename])
+                        filename = path[path.rfind('/')+1:]
+                        output = ''.join([self.paths[1], '/', year, '/', month, '/', str(index).zfill(6), '_', filename])
+                        print(output)
                         shutil.copy2(path, output)
                         index += 1
                         print('[%d%%] - Copying %s to %s' % (((index * 100) / total), filename, output))
