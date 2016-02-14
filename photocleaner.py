@@ -18,8 +18,8 @@ class PhotoParser(object):
         self.photos_to_process = self.__get_photos_to_process()
 
     def __sort_by_histogram(self):
-        print('Analyzing images...')
-        histograms = list({(hash(str(self.photo_info[p].pil_image.histogram())), p) for p in self.photo_info})
+        print('Grouping images by histogram...')
+        histograms = list({(p.get_histogram(), p) for p in self.photo_info})
         histograms.sort(key=lambda k: k[0])
         result = {}
         for key, values in groupby(histograms, key=lambda x: x[0]):
@@ -35,7 +35,9 @@ class PhotoParser(object):
             photos_to_process.append(v[0])
 
             if len(v) > 1:
-                print('\t' + str(v))
+                print('Identical photos found:')
+                for img in v:
+                    print('\t' + img.get_file_name())
                 same_photos = same_photos + 1
 
         if same_photos == 0:
@@ -49,8 +51,10 @@ class PhotoParser(object):
             # Order photos by creation date
             tmp_photos = {}
             for i in self.photos_to_process:
+                print(i)
+            '''
                 tmp_photos[i] = self.photo_info[i].get_file_date()
-            photos_by_creation = sorted(tmp_photos.items(), key=lambda x: x[1])
+            photos_by_creation = sorted(tmp_photos.items())
 
             # Making of the directory tree
 
@@ -66,6 +70,7 @@ class PhotoParser(object):
                     if year == uy:
                         months.append(p[1][5:7])
                 result[uy] = list(set(months))
+            '''
 
         except Exception, e:
             print('Error processing data:')
@@ -76,13 +81,28 @@ class PhotoParser(object):
 class PhotoInfo(object):
     def __init__(self, file_info):
         self.file_info = file_info
-        self.pil_image = None
+        self.histogram = None
 
-    def set_pil_image(self, pil_image):
-        self.pil_image = pil_image
+    def set_histogram(self, histogram):
+        self.histogram = histogram
+
+    def get_histogram(self):
+        return self.histogram
+
+    def get_file_size(self):
+        return self.file_info['fsize']
+
+    def get_file_name(self):
+        return self.file_info['fname']
 
     def get_file_date(self):
         return self.file_info['f_ct']
+
+    def get_year(self):
+        return self.file_info['f_ct'][:4]
+
+    def get_month(self):
+        return self.file_info['f_ct'][5:7]
 
 
 class PhotoCleaner(object):
@@ -93,8 +113,8 @@ class PhotoCleaner(object):
         self.output_path = paths[1]
         self.images_found = 0
         self.__scan_path_for_images()
-        self.images_files = self.__create_image_file_objects()
-        self.__complete_image_file_info()
+        self.photo_info = self.__create_photo_info_objects()
+        self.__analyze_histogram()
 
     def __scan_path_for_images(self):
         self.file_list = [os.path.join(x[0], y) for x in os.walk(self.input_path) for y in x[2]]
@@ -107,10 +127,10 @@ class PhotoCleaner(object):
         else:
             print('Found %d images' % self.images_found)
 
-    def __create_image_file_objects(self):
+    def __create_photo_info_objects(self):
         needed_free_space = 0
         print('Calculating free space...')
-        image_files = []
+        photo_info = []
         for f in self.img_list:
             file_stats = os.stat(f)
             file_info = {
@@ -119,7 +139,7 @@ class PhotoCleaner(object):
                 'f_ct': time.strftime("%Y-%m-%d %I:%M:%S%p", time.localtime(file_stats[stat.ST_CTIME]))
             }
             needed_free_space += file_stats[stat.ST_SIZE]
-            image_files.append(PhotoInfo(file_info))
+            photo_info.append(PhotoInfo(file_info))
 
         free_space = self.__get_free_space()
 
@@ -131,21 +151,25 @@ class PhotoCleaner(object):
         else:
             print('%ld bytes of free disk space are available, %ld bytes needed' % (free_space, needed_free_space))
 
-        return image_files
+        return photo_info
 
     @staticmethod
     def __get_free_space():
         return psutil.disk_usage(".").free
 
-    def __complete_image_file_info(self):
-        print('Loading images...')
+    def __analyze_histogram(self):
+        print('Analyzing histograms...')
         try:
-            for i in self.images_files:
-                PIL_image = Image.open(i.file_info['fname'])
-                i.set_pil_image(PIL_image)
-                self.photo_info[i.file_info['fname']] = i
+            index = 0
+            total = len(self.photo_info)
+            for i in self.photo_info:
+                image = Image.open(i.get_file_name())
+                histogram = hash(str(image.histogram()))
+                i.set_histogram(histogram)
+                index += 1
+                print('Completed %d%%' % ((100 * index) / total))
         except Exception, e:
-            print('Error while loading images')
+            print('Error analyzing histograms')
             print(repr(e))
             sys.exit(-1)
 
