@@ -62,12 +62,13 @@ class PhotoParser(object):
 
             for y in years:
                 for p in self.photos_to_process:
+                    print('Processing %s - Date: %s' % (p.get_file_name(), p.get_file_date()))
                     months = list(set([p.get_month() for p in self.photos_to_process if y == p.get_year()]))
                     for m in months:
                         self.data_tree[y][m] = []
 
-                for p in self.photos_to_process:
-                    self.data_tree[p.get_year()][p.get_month()].append(p)
+            for p in self.photos_to_process:
+                self.data_tree[p.get_year()][p.get_month()].append(p)
 
             # Data tree is completed.
             self.__create_directory_tree()
@@ -127,13 +128,13 @@ class PhotoInfo(object):
         return self.file_info['fname']
 
     def get_file_date(self):
-        return self.file_info['f_ct']
+        return self.file_info['f_mt']
 
     def get_year(self):
-        return self.file_info['f_ct'][:4]
+        return self.file_info['f_mt'][:4]
 
     def get_month(self):
-        return self.file_info['f_ct'][5:7]
+        return self.file_info['f_mt'][5:7]
 
 
 class PhotoCleaner(object):
@@ -167,7 +168,7 @@ class PhotoCleaner(object):
             file_info = {
                 'fname': f,
                 'fsize': file_stats[stat.ST_SIZE],
-                'f_ct': time.strftime("%Y-%m-%d %I:%M:%S%p", time.localtime(file_stats[stat.ST_CTIME]))
+                'f_mt': time.strftime("%Y-%m-%d %I:%M:%S%p", time.localtime(file_stats[stat.ST_MTIME]))
             }
             needed_free_space += file_stats[stat.ST_SIZE]
             photo_info.append(PhotoInfo(file_info))
@@ -194,11 +195,15 @@ class PhotoCleaner(object):
             index = 0
             total = len(self.photo_info)
             for i in self.photo_info:
-                image = Image.open(i.get_file_name())
-                histogram = hash(str(image.histogram()))
-                i.set_histogram(histogram)
-                index += 1
-                print('Completed %d%%' % ((100 * index) / total))
+                try:
+                    image = Image.open(i.get_file_name())
+                    histogram = hash(str(image.histogram()))
+                    i.set_histogram(histogram)
+                    index += 1
+                    print('Completed %d%% - %s' % ((100 * index) / total, i.get_file_name()))
+                except Exception, ex:
+                    print('Skipping!')
+                    print(repr(ex))
         except Exception, e:
             print('Error analyzing histograms')
             print(repr(e))
